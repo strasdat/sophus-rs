@@ -8,20 +8,20 @@ pub mod ffi {
     }
 
     #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
-    pub struct FfiImageShape {
+    pub struct FfiImageLayout {
         size: FfiImageSize,
         pitch_in_bytes: usize,
     }
 
     #[derive(Debug, Clone)]
     pub struct FfiIntensityImage {
-        layout: FfiImageShape,
-        pixel_format: FfiRuntimePixelType,
+        layout: FfiImageLayout,
+        pixel_format: FfiPixelFormat,
         data: SharedPtr<u8>,
     }
 
     #[derive(Debug, Copy, Clone)]
-    pub struct FfiRuntimePixelType {
+    pub struct FfiPixelFormat {
         is_floating_point: bool, // unsigned otherwise
         num_channels: usize,
         num_bytes_per_pixel_channel: usize,
@@ -34,7 +34,7 @@ pub mod ffi {
 
         fn create_mut_intensity_image_from_size(
             size: FfiImageSize,
-            t: FfiRuntimePixelType,
+            t: FfiPixelFormat,
         ) -> UniquePtr<FfiMutIntensityImage>;
 
         fn create_intensity_image_from_mut(

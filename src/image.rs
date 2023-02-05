@@ -2,10 +2,10 @@ use crate::glue::ffi::create_intensity_image_from_mut;
 
 use super::glue;
 
-pub use glue::ffi::FfiImageShape as ImageLayout;
+pub use glue::ffi::FfiImageLayout as ImageLayout;
 pub use glue::ffi::FfiImageSize as ImageSize;
 pub use glue::ffi::FfiIntensityImage as IntensityImage;
-pub use glue::ffi::FfiRuntimePixelType as PixelFormat;
+pub use glue::ffi::FfiPixelFormat as PixelFormat;
 
 use strum_macros::EnumIter;
 
@@ -166,7 +166,7 @@ impl ImageLayoutTrait for ImageLayout {
 mod tests_image_layout {
 
     #[test]
-    fn image_layout() {
+    fn layout() {
         use super::*;
         let null_layout = ImageLayout::default();
         assert_eq!(null_layout.width(), 0);
