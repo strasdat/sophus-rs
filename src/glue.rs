@@ -3,8 +3,8 @@ pub mod ffi {
 
     #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
     pub struct FfiImageSize {
-        width: usize,
-        height: usize,
+        pub width: usize,
+        pub height: usize,
     }
 
     #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
@@ -15,16 +15,16 @@ pub mod ffi {
 
     #[derive(Debug, Clone)]
     pub struct FfiIntensityImage {
-        layout: FfiImageLayout,
-        pixel_format: FfiPixelFormat,
-        data: SharedPtr<u8>,
+        pub layout: FfiImageLayout,
+        pub pixel_format: FfiPixelFormat,
+        pub data: SharedPtr<u8>,
     }
 
     #[derive(Debug, Copy, Clone)]
     pub struct FfiPixelFormat {
-        is_floating_point: bool, // unsigned otherwise
-        num_channels: usize,
-        num_bytes_per_pixel_channel: usize,
+        pub is_floating_point: bool, // unsigned otherwise
+        pub num_channels: usize,
+        pub num_bytes_per_pixel_channel: usize,
     }
 
     unsafe extern "C++" {

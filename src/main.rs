@@ -9,8 +9,6 @@ fn main() {
         num_channels: 1,
         num_bytes_per_pixel_channel: 1,
     };
-    let _image = sophus_rs::glue::ffi::FfiIntensityImage::from_size_and_pixel_format(
-        image_size,
-        pixel_format,
-    );
+    let _image =
+        sophus_rs::image::IntensityImage::from_size_and_pixel_format(image_size, pixel_format);
 }

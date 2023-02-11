@@ -10,12 +10,16 @@ links = "sophus-rs"
 # Cargo.toml
 
 [dependencies]
-cxx = "1.0"
+cxx = "1.0.90"
+cxx-build = "1.0.90"
+
 image = { git = "https://github.com/image-rs/image", branch = "master" }
 paste = "1.0"
 strum = "0.24"
 strum_macros = "0.24"
 proptest = "1.0"
+pyo3 = { version = "0.18.0", features = ["extension-module"] }
+numpy = "0.18.0"
 
 [build-dependencies]
 cxx-build = "1.0"

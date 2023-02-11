@@ -1,11 +1,69 @@
 use crate::glue::ffi::create_intensity_image_from_mut;
 
 use super::glue;
+use numpy::ndarray::{ArrayView, Dim};
+use numpy::{PyArray, ToPyArray};
 
 pub use glue::ffi::FfiImageLayout as ImageLayout;
-pub use glue::ffi::FfiImageSize as ImageSize;
-pub use glue::ffi::FfiIntensityImage as IntensityImage;
-pub use glue::ffi::FfiPixelFormat as PixelFormat;
+
+#[pyclass]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
+pub struct ImageSize {
+    pub width: usize,
+    pub height: usize,
+}
+
+impl From<glue::ffi::FfiImageSize> for ImageSize {
+    fn from(s: glue::ffi::FfiImageSize) -> Self {
+        ImageSize {
+            width: s.width,
+            height: s.height,
+        }
+    }
+}
+
+impl From<ImageSize> for glue::ffi::FfiImageSize {
+    fn from(s: ImageSize) -> Self {
+        glue::ffi::FfiImageSize {
+            width: s.width,
+            height: s.height,
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Debug, Copy, Clone)]
+pub struct PixelFormat {
+    pub is_floating_point: bool, // unsigned otherwise
+    pub num_channels: usize,
+    pub num_bytes_per_pixel_channel: usize,
+}
+
+impl From<glue::ffi::FfiPixelFormat> for PixelFormat {
+    fn from(f: glue::ffi::FfiPixelFormat) -> Self {
+        PixelFormat {
+            is_floating_point: f.is_floating_point,
+            num_channels: f.num_channels,
+            num_bytes_per_pixel_channel: f.num_bytes_per_pixel_channel,
+        }
+    }
+}
+
+impl From<PixelFormat> for glue::ffi::FfiPixelFormat {
+    fn from(f: PixelFormat) -> Self {
+        glue::ffi::FfiPixelFormat {
+            is_floating_point: f.is_floating_point,
+            num_channels: f.num_channels,
+            num_bytes_per_pixel_channel: f.num_bytes_per_pixel_channel,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[pyclass]
+pub struct IntensityImage(glue::ffi::FfiIntensityImage);
+
+use pyo3::prelude::*;
 
 use strum_macros::EnumIter;
 
@@ -20,6 +78,15 @@ pub enum PixelTag {
     PF32,
     P3F32,
     P4F32,
+}
+
+pub enum NDArrayViewEnum<'a> {
+    U8(ArrayView<'a, u8, Dim<[usize; 2]>>),
+    XU8(ArrayView<'a, u8, Dim<[usize; 3]>>),
+    U16(ArrayView<'a, u16, Dim<[usize; 2]>>),
+    XU16(ArrayView<'a, u16, Dim<[usize; 3]>>),
+    F32(ArrayView<'a, f32, Dim<[usize; 2]>>),
+    XF32(ArrayView<'a, f32, Dim<[usize; 3]>>),
 }
 
 impl PixelFormat {
@@ -109,14 +176,14 @@ impl ImageSize {
 impl ImageLayout {
     pub fn from_width_and_height<T>(width: usize, height: usize) -> Self {
         ImageLayout {
-            size: ImageSize { width, height },
+            size: ImageSize { width, height }.into(),
             pitch_in_bytes: width * std::mem::size_of::<T>(),
         }
     }
 
     pub fn from_size_and_tag(size: ImageSize, tag: PixelTag) -> Self {
         ImageLayout {
-            size,
+            size: size.into(),
             pitch_in_bytes: size.width * PixelFormat::from(tag).num_bytes_per_pixel(),
         }
     }
@@ -153,7 +220,7 @@ pub trait ImageLayoutTrait: ImageSizeTrait {
 
 impl ImageSizeTrait for ImageLayout {
     fn size(&self) -> ImageSize {
-        self.size
+        self.size.into()
     }
 }
 
@@ -352,7 +419,7 @@ pub trait ImageViewTrait<T: PixelTrait>: ImageLayoutTrait {
 
 impl<'a, T: PixelTrait> ImageSizeTrait for ImageView<'a, T> {
     fn size(&self) -> ImageSize {
-        self.layout.size
+        self.layout.size.into()
     }
 }
 
@@ -383,7 +450,7 @@ impl<'a, T: PixelTrait> ImageSizeTrait for Image<'a, T> {
 
 impl<'a, T: PixelTrait> ImageLayoutTrait for Image<'a, T> {
     fn layout(&self) -> ImageLayout {
-        self.img.layout
+        self.img.0.layout
     }
 }
 
@@ -403,9 +470,9 @@ impl<'a, T: PixelTrait> Image<'a, T> {
     }
 
     pub fn try_from(img: IntensityImage) -> Option<Image<'a, T>> {
-        if T::Scalar::is_floating() != img.pixel_format.is_floating_point
-            || std::mem::size_of::<T::Scalar>() != img.pixel_format.num_bytes_per_pixel_channel
-            || T::NUM_CHANNELS != img.pixel_format.num_channels
+        if T::Scalar::is_floating() != img.0.pixel_format.is_floating_point
+            || std::mem::size_of::<T::Scalar>() != img.0.pixel_format.num_bytes_per_pixel_channel
+            || T::NUM_CHANNELS != img.0.pixel_format.num_channels
         {
             return None;
         }
@@ -413,19 +480,19 @@ impl<'a, T: PixelTrait> Image<'a, T> {
         let flat_view = image::flat::FlatSamples {
             samples,
             layout: image::flat::SampleLayout {
-                channels: img.pixel_format.num_channels as u8,
+                channels: img.0.pixel_format.num_channels as u8,
                 channel_stride: 1,
-                width: img.layout.size.width as u32,
+                width: img.0.layout.size.width as u32,
                 width_stride: img.stride(),
-                height: img.layout.size.height as u32,
-                height_stride: img.layout.size.height,
+                height: img.0.layout.size.height as u32,
+                height_stride: img.0.layout.size.height,
             },
             color_hint: None,
         };
         Some(Image {
             img: img.clone(),
             view: ImageView {
-                layout: img.layout,
+                layout: img.0.layout,
                 slice: img.try_get_slice::<T>().unwrap(),
             },
             flat_view,
@@ -481,7 +548,7 @@ trait MutImageViewTrait<T: PixelTrait>: ImageViewTrait<T> {
 
 impl<'a, T: PixelTrait> ImageSizeTrait for MutImageView<'a, T> {
     fn size(&self) -> ImageSize {
-        self.layout.size
+        self.layout.size.into()
     }
 }
 
@@ -719,9 +786,12 @@ pub struct MutIntensityImage {
 impl MutIntensityImage {
     pub fn from_size_and_pixel_format(size: ImageSize, pixel_format: PixelFormat) -> Self {
         MutIntensityImage {
-            cpp_impl: glue::ffi::create_mut_intensity_image_from_size(size, pixel_format),
+            cpp_impl: glue::ffi::create_mut_intensity_image_from_size(
+                size.into(),
+                pixel_format.into(),
+            ),
             layout: ImageLayout {
-                size,
+                size: size.into(),
                 pitch_in_bytes: size.width
                     * pixel_format.num_bytes_per_pixel_channel
                     * pixel_format.num_channels,
@@ -797,7 +867,7 @@ impl MutIntensityImage {
     }
 
     pub fn image_size(&self) -> ImageSize {
-        self.layout.size
+        self.layout.size.into()
     }
 
     pub fn pixel_format(&self) -> PixelFormat {
@@ -805,25 +875,160 @@ impl MutIntensityImage {
     }
 }
 
+pub enum PyArrayEnum<'py> {
+    U8(&'py PyArray<u8, Dim<[usize; 2]>>),
+    XU8(&'py PyArray<u8, Dim<[usize; 3]>>),
+    U16(&'py PyArray<u16, Dim<[usize; 2]>>),
+    XU16(&'py PyArray<u16, Dim<[usize; 3]>>),
+    F32(&'py PyArray<f32, Dim<[usize; 2]>>),
+    XF32(&'py PyArray<f32, Dim<[usize; 3]>>),
+}
+
+impl<'py> IntoPy<PyObject> for PyArrayEnum<'py> {
+    fn into_py(self, _py: Python<'_>) -> PyObject {
+        match self {
+            PyArrayEnum::F32(py_array) => py_array.into(),
+            PyArrayEnum::U8(py_array) => py_array.into(),
+            PyArrayEnum::XU8(py_array) => py_array.into(),
+            PyArrayEnum::U16(py_array) => py_array.into(),
+            PyArrayEnum::XU16(py_array) => py_array.into(),
+            PyArrayEnum::XF32(py_array) => py_array.into(),
+        }
+    }
+}
+
+#[pymethods]
 impl IntensityImage {
+    #[new]
     pub fn from_size_and_pixel_format(size: ImageSize, pixel_format: PixelFormat) -> Self {
-        let mut mut_img = glue::ffi::create_mut_intensity_image_from_size(size, pixel_format);
-        create_intensity_image_from_mut(&mut mut_img)
+        let mut mut_img =
+            glue::ffi::create_mut_intensity_image_from_size(size.into(), pixel_format.into());
+        IntensityImage(create_intensity_image_from_mut(&mut mut_img))
+    }
+
+    pub fn pyarray<'py>(&self, py: Python<'py>) -> PyArrayEnum<'py> {
+        match self.ndarray_view() {
+            NDArrayViewEnum::U8(a) => PyArrayEnum::U8(a.to_pyarray(py)),
+            NDArrayViewEnum::XU8(a) => PyArrayEnum::XU8(a.to_pyarray(py)),
+            NDArrayViewEnum::U16(a) => PyArrayEnum::U16(a.to_pyarray(py)),
+            NDArrayViewEnum::XU16(a) => PyArrayEnum::XU16(a.to_pyarray(py)),
+            NDArrayViewEnum::F32(a) => PyArrayEnum::F32(a.to_pyarray(py)),
+            NDArrayViewEnum::XF32(a) => PyArrayEnum::XF32(a.to_pyarray(py)),
+        }
+    }
+}
+
+#[pyfunction]
+pub fn new_image() -> IntensityImage {
+    IntensityImage::from_size_and_pixel_format(
+        ImageSize {
+            width: 640,
+            height: 480,
+        },
+        PixelFormat {
+            is_floating_point: true,
+            num_channels: 1,
+            num_bytes_per_pixel_channel: 4,
+        },
+    )
+}
+
+impl IntensityImage {
+    pub fn ndarray_view(&self) -> NDArrayViewEnum {
+        if self.try_get_slice::<u8>().is_some() {
+            return NDArrayViewEnum::U8(
+                ArrayView::from_shape(
+                    (self.image_size().height, self.image_size().width),
+                    self.try_get_flat_slice::<u8>().unwrap(),
+                )
+                .unwrap(),
+            );
+        }
+        if self.try_get_slice::<[u8; 3]>().is_some() {
+            return NDArrayViewEnum::XU8(
+                ArrayView::from_shape(
+                    (self.image_size().height, self.image_size().width, 3),
+                    self.try_get_flat_slice::<u8>().unwrap(),
+                )
+                .unwrap(),
+            );
+        }
+        if self.try_get_slice::<[u8; 4]>().is_some() {
+            return NDArrayViewEnum::XU8(
+                ArrayView::from_shape(
+                    (self.image_size().height, self.image_size().width, 4),
+                    self.try_get_flat_slice::<u8>().unwrap(),
+                )
+                .unwrap(),
+            );
+        }
+        if self.try_get_slice::<u16>().is_some() {
+            return NDArrayViewEnum::U16(
+                ArrayView::from_shape(
+                    (self.image_size().height, self.image_size().width),
+                    self.try_get_flat_slice::<u16>().unwrap(),
+                )
+                .unwrap(),
+            );
+        }
+        if self.try_get_slice::<[u16; 3]>().is_some() {
+            return NDArrayViewEnum::XU16(
+                ArrayView::from_shape(
+                    (self.image_size().height, self.image_size().width, 3),
+                    self.try_get_flat_slice::<u16>().unwrap(),
+                )
+                .unwrap(),
+            );
+        }
+        if self.try_get_slice::<[u16; 4]>().is_some() {
+            return NDArrayViewEnum::XU16(
+                ArrayView::from_shape(
+                    (self.image_size().height, self.image_size().width, 4),
+                    self.try_get_flat_slice::<u16>().unwrap(),
+                )
+                .unwrap(),
+            );
+        }
+        if self.try_get_slice::<f32>().is_some() {
+            return NDArrayViewEnum::F32(
+                ArrayView::from_shape(
+                    (self.image_size().height, self.image_size().width),
+                    self.try_get_flat_slice::<f32>().unwrap(),
+                )
+                .unwrap(),
+            );
+        }
+        if self.try_get_slice::<[f32; 3]>().is_some() {
+            return NDArrayViewEnum::XF32(
+                ArrayView::from_shape(
+                    (self.image_size().height, self.image_size().width, 3),
+                    self.try_get_flat_slice::<f32>().unwrap(),
+                )
+                .unwrap(),
+            );
+        }
+        return NDArrayViewEnum::XF32(
+            ArrayView::from_shape(
+                (self.image_size().height, self.image_size().width, 4),
+                self.try_get_flat_slice::<f32>().unwrap(),
+            )
+            .unwrap(),
+        );
     }
 
     pub fn from_mut(mut mut_image: MutIntensityImage) -> Self {
-        create_intensity_image_from_mut(&mut mut_image.cpp_impl)
+        IntensityImage(create_intensity_image_from_mut(&mut mut_image.cpp_impl))
     }
 
     pub fn raw_u8_ptr(&self) -> *const u8 {
-        glue::ffi::get_raw_ptr(self)
+        glue::ffi::get_raw_ptr(&self.0)
     }
 
     pub fn raw_u8_slice<'a>(&self) -> &'a [u8] {
         unsafe {
             std::slice::from_raw_parts(
                 self.raw_u8_ptr(),
-                self.layout.size.width * self.layout.pitch_in_bytes,
+                self.0.layout.size.width * self.0.layout.pitch_in_bytes,
             )
         }
     }
@@ -833,50 +1038,51 @@ impl IntensityImage {
     }
 
     pub fn try_get_slice<'a, T: PixelTrait>(&self) -> Option<&'a [T]> {
-        if !T::Scalar::is_floating() != self.pixel_format.is_floating_point
-            || std::mem::size_of::<T>() != self.pixel_format.num_bytes_per_pixel_channel
+        if T::Scalar::is_floating() != self.0.pixel_format.is_floating_point
+            || std::mem::size_of::<T::Scalar>() != self.0.pixel_format.num_bytes_per_pixel_channel
+            || T::NUM_CHANNELS != self.0.pixel_format.num_channels
         {
             None
         } else {
             unsafe {
                 Some(std::slice::from_raw_parts(
                     self.raw_u8_ptr() as *const T,
-                    self.layout.size.height * self.stride(),
+                    self.0.layout.size.height * self.stride(),
                 ))
             }
         }
     }
 
     pub fn try_get_flat_slice<'a, T: ScalarTrait>(&self) -> Option<&'a [T]> {
-        if !T::is_floating() != self.pixel_format.is_floating_point
-            || std::mem::size_of::<T>() != self.pixel_format.num_bytes_per_pixel_channel
+        if T::is_floating() != self.0.pixel_format.is_floating_point
+            || std::mem::size_of::<T>() != self.0.pixel_format.num_bytes_per_pixel_channel
         {
             None
         } else {
             unsafe {
                 Some(std::slice::from_raw_parts(
                     self.raw_u8_ptr() as *const T,
-                    self.layout.size.width * self.stride() * self.pixel_format.num_channels,
+                    self.0.layout.size.width * self.stride() * self.0.pixel_format.num_channels,
                 ))
             }
         }
     }
 
     pub fn stride(&self) -> usize {
-        self.layout.pitch_in_bytes
-            / (self.pixel_format.num_bytes_per_pixel_channel * self.pixel_format.num_channels)
+        self.0.layout.pitch_in_bytes
+            / (self.0.pixel_format.num_bytes_per_pixel_channel * self.0.pixel_format.num_channels)
     }
 
     pub fn layout(&self) -> ImageLayout {
-        self.layout
+        self.0.layout
     }
 
     pub fn image_size(&self) -> ImageSize {
-        self.layout.size
+        self.0.layout.size.into()
     }
 
     pub fn pixel_format(&self) -> PixelFormat {
-        self.pixel_format
+        self.0.pixel_format.into()
     }
 }
 
