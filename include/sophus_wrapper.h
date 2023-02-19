@@ -2,7 +2,7 @@
 
 #include "rust/cxx.h"
 
-#include <sophus/image/runtime_image_types.h>
+#include <sophus/image/dyn_image_types.h>
 
 namespace sophus {
 
@@ -15,10 +15,10 @@ struct FfiMutIntensityImage {
   FfiMutIntensityImage() = default;
 
   FfiMutIntensityImage(
-      MutRuntimeImage<IntensityImagePredicate>&& mut_runtime_image)
+      MutDynImage<IntensityImagePredicate>&& mut_runtime_image)
       : mut_runtime_image(std::move(mut_runtime_image)) {}
 
-  MutRuntimeImage<IntensityImagePredicate> mut_runtime_image;
+  MutDynImage<IntensityImagePredicate> mut_runtime_image;
 };
 
 std::unique_ptr<FfiMutIntensityImage> create_mut_intensity_image_from_size(

@@ -14,27 +14,27 @@ FfiImageSize fromImageSize(ImageSize image_size) {
   return FfiImageSize{size_t(image_size.width), size_t(image_size.height)};
 }
 
-sophus::ImageShape toImageShape(FfiImageShape s) {
-  return ::sophus::ImageShape(s.size.width, s.size.height, s.pitch_in_bytes);
+sophus::ImageLayout toImageShape(FfiImageShape s) {
+  return ::sophus::ImageLayout(s.size.width, s.size.height, s.pitch_in_bytes);
 }
 
-FfiImageShape fromImageShape(ImageShape shape) {
+FfiImageShape fromImageShape(ImageLayout shape) {
   return FfiImageShape{fromImageSize(shape.imageSize()), shape.pitchBytes()};
 }
 
-sophus::RuntimePixelType toRuntimePixelType(FfiRuntimePixelType t) {
+sophus::PixelFormat toRuntimePixelType(FfiRuntimePixelType t) {
   sophus::NumberType type = t.is_floating_point
                                 ? sophus::NumberType::floating_point
                                 : sophus::NumberType::fixed_point;
 
-  return sophus ::RuntimePixelType{
+  return sophus ::PixelFormat{
       .number_type = type,
       .num_channels = int(t.num_channels),
       .num_bytes_per_pixel_channel = int(t.num_bytes_per_pixel_channel),
   };
 }
 
-FfiRuntimePixelType fromRuntimePixelType(sophus::RuntimePixelType pixel_type) {
+FfiRuntimePixelType fromPixelFormat(sophus::PixelFormat pixel_type) {
   return FfiRuntimePixelType{
       .is_floating_point =
           pixel_type.number_type == sophus::NumberType::floating_point,
@@ -48,7 +48,7 @@ class IntensityImageHelper : public sophus::IntensityImage<> {
   IntensityImageHelper(sophus::IntensityImage<> s)
       : sophus::IntensityImage<>(s) {}
   IntensityImageHelper(
-      ImageSize const& size, RuntimePixelType const& pixel_type)
+      ImageSize const& size, PixelFormat const& pixel_type)
       : sophus::IntensityImage<>(size, pixel_type) {}
   IntensityImageHelper(FfiIntensityImage wrapper)
       : sophus::IntensityImage<>(
@@ -56,8 +56,8 @@ class IntensityImageHelper : public sophus::IntensityImage<> {
             toRuntimePixelType(wrapper.pixel_format),
             wrapper.data) {}
   IntensityImageHelper(
-      ImageShape const& shape,
-      RuntimePixelType const& pixel_type,
+      ImageLayout const& shape,
+      PixelFormat const& pixel_type,
       std::shared_ptr<uint8_t> data)
       : sophus::IntensityImage<>(shape, pixel_type, data) {}
 
@@ -69,8 +69,8 @@ class IntensityImageHelper : public sophus::IntensityImage<> {
 
   FfiIntensityImage wrapper() const {
     return FfiIntensityImage{
-        .layout = fromImageShape(this->shape_),
-        .pixel_format = fromRuntimePixelType(this->pixel_type_),
+        .layout = fromImageShape(this->layout_),
+        .pixel_format = fromPixelFormat(this->pixel_format_),
         .data = this->sharedPtr()};
   }
 };
